@@ -269,7 +269,7 @@ impl SessionMaker {
         let sessions = {
             let data = self.data.read().await;
             let data = data.read();
-            let guild_data = data.guilds.get(&guild_id).unwrap();
+            let guild_data = data.guilds.get(&guild_id)?;
             guild_data.sessions.0.clone()
         };
         let guild_channels = match guild_id.channels(ctx).await {
