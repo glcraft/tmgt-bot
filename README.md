@@ -1,26 +1,11 @@
-# CDDIO
+# TMGT Bot
 
-Bot Discord officiel du serveur Coin des Developpeurs ([Rejoignez nous !](https://discord.gg/m9EZNKVaPz))
+Bot Discord servant à créér des salons vocaux a la volée
+La base du code est issue du [bot discord CDDIO](https://github.com/lecoindesdevs/openCDD).
 
-Crée par la communauté pour la communauté.
+## Utilisation
 
-Ce bot est développé en [**Rust**](https://www.rust-lang.org/) et utilise les crates [**serenity**](https://crates.io/crates/serenity), **cddio-core** et **cddio-macro** pour gérer l'API Discord.
-
-[**Vous pouvez retrouver la liste des commandes ici**](src/components/README.md)
-
-## Fonctionnalités
-
-* [*Autobahn*, l'anti spam](src/components/autobahn/README.md)
-* [Aide du bot](src/components/help/README.md)
-* [Commandes diverses](src/components/misc/README.md)
-* [Commandes de modération](src/components/modo/README.md)
-* [Déclaration des slash commands](src/components/slash/README.md)
-* [Gestion de ticket du serveur](src/components/tickets/README.md)
-* [Dall-e Mini](src/components/dalle_mini/README.md)
-
-## Contribution
-
-Retrouvez la documentation technique du bot [ici](https://lecoindesdevs.github.io/openCDD/cddio/)
+Assignez un salon *générateur* avec la commande `/session set <salon>`. Dès que vous entrerez dans ce salon vocal, vous serez déplacé dans un nouveau salon vocal.
 
 ## Licence
 
