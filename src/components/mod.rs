@@ -6,6 +6,8 @@ pub mod help;
 pub use help::*;
 pub mod slash;
 pub use slash::*;
+pub mod misc;
+pub use misc::*;
 
 // Fonctions utiles pour les composants
 mod utils;

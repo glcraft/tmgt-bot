@@ -41,6 +41,7 @@ impl Bot {
             let mut container = ref_container.write().await;
             container.add_component(cmp::Help::new(ref_container.clone()));
             container.add_component(cmp::SlashCommand::new(app_id, ref_container.clone(), owners_id));
+            container.add_component(cmp::Misc::new(perms));
         }
         let client = Client::builder(&config.token, GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT)
             .raw_event_handler(ref_container.read().await.get_event_dispatcher())
