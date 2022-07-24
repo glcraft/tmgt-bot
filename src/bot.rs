@@ -44,7 +44,7 @@ impl Bot {
             container.add_component(cmp::SessionMaker::new());
             container.add_component(cmp::Misc::new(perms));
         }
-        let client = Client::builder(&config.token, GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT)
+        let client = Client::builder(&config.token, GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT | GatewayIntents::GUILD_PRESENCES)
             .raw_event_handler(ref_container.read().await.get_event_dispatcher())
             .application_id(config.app_id)
             .await?;
