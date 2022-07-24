@@ -5,7 +5,14 @@ use cddio_macros::component;
 use futures_locks::RwLock;
 use super::utils::data::Data;
 use serde::{Serialize, Deserialize};
-use serenity::{model::{id::{ChannelId, GuildId, UserId}, event::{ReadyEvent, ChannelCreateEvent, ChannelUpdateEvent, VoiceStateUpdateEvent}, voice::VoiceState}, client::Context};
+use serenity::{
+    model::{
+        id::{ChannelId, GuildId, UserId}, 
+        event::{ReadyEvent, VoiceStateUpdateEvent, PresenceUpdateEvent}, 
+        voice::VoiceState, gateway::Presence
+    }, 
+    client::Context
+};
 
 
 pub struct SessionMaker {
@@ -36,7 +43,7 @@ struct DataSessions {
 #[group(name="session", description="Gestion des sessions")]
 impl SessionMaker {
     #[event(Ready)]
-    async fn on_ready(&self, ctx: &Context, ready: &ReadyEvent) {
+    async fn on_ready(&self, ctx: &Context, _: &ReadyEvent) {
         let guilds = self.data.read().await.read().guilds.iter().map(|(guild_id, _)| *guild_id).collect::<Vec<_>>();
         for guild_id in guilds {
             match self.check_sessions(ctx, guild_id).await {
@@ -50,6 +57,26 @@ impl SessionMaker {
         match voice_update.voice_state.channel_id {
             Some(_) => self.on_voice_connect(ctx, &voice_update.voice_state).await,
             None => self.on_voice_disconnect(ctx, &voice_update.voice_state).await,
+        }
+    }
+    #[event(PresenceUpdate)]
+    async fn on_presence_update(&self, ctx: &Context, presence_update: &PresenceUpdateEvent) {
+        let guild_id = match presence_update.presence.guild_id {
+            Some(guild_id) => guild_id,
+            None => return,
+        };
+        let session_channel = match self.find_session_by_user(ctx, guild_id, presence_update.presence.user.id).await {
+            Some(session) => session,
+            None => return,
+        };
+        let session_name = match Self::get_session_name_from_presence(&presence_update.presence) {
+            Some(name) => name,
+            None => "Session",
+        };
+        
+        match session_channel.edit(ctx, |m| m.name(session_name)).await {
+            Ok(_) => {},
+            Err(e) => println!("Erreur lors du renommange du salon vocal {}: {}", session_channel, e),
         }
     }
     #[command(group="session", name="set", description="Changer un salon en créateur de session")]
@@ -140,7 +167,7 @@ impl SessionMaker {
         }
     }
     async fn create_session(&self, ctx: &Context, guild_id: GuildId, user_id: UserId) -> Result<(), Cow<'static, str>> {
-        let session_maker_id = match self.data.read().await.read().guilds.iter().find_map(|(guild_id, guild_data)| {
+        let session_maker_id = match self.data.read().await.read().guilds.iter().find_map(|(_, guild_data)| {
             guild_data.session_maker.as_ref().map(|session_maker| {
                 session_maker.0
             })
@@ -167,8 +194,12 @@ impl SessionMaker {
             Some(parent_id) => parent_id,
             None => return Err(Cow::Borrowed("Le salon de création de session n'a pas de parent")),
         };
+        let session_name = match Self::get_session_name_from_user(ctx, guild_id, user_id).await {
+            Some(name) => name,
+            None => "Session".to_string(),
+        };
         let session = match guild_id.create_channel(ctx, |create_channel| {
-            create_channel.name("Session".to_string())
+            create_channel.name(session_name)
                 .kind(serenity::model::channel::ChannelType::Voice)
                 .category(parent_id)
         }).await {
@@ -233,5 +264,46 @@ impl SessionMaker {
             guild_data.sessions.0.retain(|channel_session| channel_session.0 != session_id);
         }
         Ok(())
+    }
+    async fn find_session_by_user(&self, ctx: &Context, guild_id: GuildId, user_id: UserId) -> Option<ChannelId> {
+        let sessions = {
+            let data = self.data.read().await;
+            let data = data.read();
+            let guild_data = data.guilds.get(&guild_id).unwrap();
+            guild_data.sessions.0.clone()
+        };
+        let guild_channels = match guild_id.channels(ctx).await {
+            Ok(channels) => channels,
+            _ => return None,
+        };
+        let sessions_channel = guild_channels.into_iter().filter(|(c_id, _)| sessions.contains(&ChannelSession(*c_id))).collect::<Vec<_>>();
+        for (session_channel_id, session_channel) in sessions_channel {
+            let members = match session_channel.members(ctx).await {
+                Ok(members) => members,
+                Err(e) => {
+                    println!("Erreur lors de la récupération des membres du salon de session: {}", e.to_string());
+                    continue;
+                },
+            };
+            if members.iter().any(|member| member.user.id == user_id) {
+                return Some(session_channel_id);
+            }
+        }
+        None
+    }
+    async fn get_session_name_from_user(ctx: &Context, guild_id: GuildId, user_id: UserId) -> Option<String> {
+        let guild = guild_id.to_guild_cached(ctx)?;
+        println!("presences:\n{:?}", guild.presences);
+        let presence = guild.presences.iter().find_map(|(presence_user_id, presence)| {
+            if *presence_user_id == user_id {
+                Some(presence)
+            } else {
+                None
+            }
+        })?;
+        Self::get_session_name_from_presence(presence).map(String::from)
+    }
+    fn get_session_name_from_presence<'a>(presence: &'a Presence) -> Option<&'a str> {
+        Some(presence.activities.first()?.name.as_str())
     }
 }
