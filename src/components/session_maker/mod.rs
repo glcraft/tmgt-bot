@@ -84,49 +84,56 @@ impl SessionMaker {
         #[argument(description="Salon vocal à changer")]
         salon_vocal: ChannelId
     ) {
-        use serenity::model::channel::ChannelType;
-        let guild_id = match app_cmd.0.guild_id {
-            Some(v) => v,
-            None => {
-                println!("Cette commande ne peut être utilisée en message privé.");
-                return;
-            }
-        };
-        let channels = match guild_id.channels(ctx).await {
-            Ok(v) => v,
+        use cddio_core::message;
+        let resp = match app_cmd.delayed_response(ctx, false).await {
+            Ok(resp) => resp,
             Err(e) => {
-                println!("Impossible de récupérer les salons de ce serveur: {}", e.to_string());
+                println!("Erreur lors de la réponse de la commande: {}", e);
                 return;
             }
         };
-        let found_channel = channels.into_iter().find_map(|(c_id, channel)| {
-            if c_id == salon_vocal {
-                Some(channel)
-            } else {
-                None
+        let result = 'result: loop {
+            use serenity::model::channel::ChannelType;
+            let guild_id = match app_cmd.0.guild_id {
+                Some(v) => v,
+                None => break 'result Err(Cow::Borrowed("Cette commande ne peut être utilisée en message privé."))
+            };
+            let channels = match guild_id.channels(ctx).await {
+                Ok(v) => v,
+                Err(e) => break 'result Err(Cow::Owned(format!("Impossible de récupérer les salons de ce serveur: {}", e.to_string())))
+            };
+            let found_channel = channels.into_iter().find_map(|(c_id, channel)| {
+                if c_id == salon_vocal {
+                    Some(channel)
+                } else {
+                    None
+                }
+            });
+            let channel = match found_channel {
+                Some(v) => v,
+                None => break 'result Err(Cow::Borrowed("Salon vocal introuvable."))
+            };
+            if channel.kind != ChannelType::Voice {
+                break 'result Err(Cow::Borrowed("Ce salon n'est pas un salon vocal."));
             }
-        });
-        let channel = match found_channel {
-            Some(v) => v,
-            None => {
-                println!("Salon vocal introuvable.");
-                return;
+            if let None = channel.parent_id {
+                break 'result Err(Cow::Borrowed("Ce salon n'est pas dans une catégorie."));
             }
+            {
+                let mut data = self.data.write().await;
+                let mut data = data.write();
+                let guild_data = data.guilds.entry(guild_id).or_default();
+                guild_data.session_maker = Some(ChannelSessionMaker(salon_vocal));
+            }
+            break Ok(());
         };
-        if channel.kind != ChannelType::Voice {
-            println!("Ce salon n'est pas un salon vocal.");
-            return;
-        }
-        if let None = channel.parent_id{
-            println!("Ce salon n'est pas dans une catégorie.");
-            return;
-        }
-        {
-            let mut data = self.data.write().await;
-            let mut data = data.write();
-            let guild_data = data.guilds.entry(guild_id).or_default();
-            guild_data.session_maker = Some(ChannelSessionMaker(salon_vocal));
-        }
+        let result = match result {
+            Ok(_) => resp.send_message(message::success("Salon changé en créateur de session.")).await,
+            Err(e) => resp.send_message(message::error(e.as_ref())).await,
+        };
+        if let Err(e) = result {
+            println!("Erreur lors de l'envoi de la réponse de la commande: {}", e);
+        };
     }
 }
 impl SessionMaker {
